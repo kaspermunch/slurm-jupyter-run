@@ -11,6 +11,24 @@ import argparse
 from textwrap import wrap
 from subprocess import PIPE, Popen
 
+import json, copy
+
+def modpath(p, parent=None, base=None, suffix=None):
+    par, name = os.path.split(p)
+    name_no_suffix, suf = os.path.splitext(name)
+    if type(suffix) is str:
+        suf = suffix
+    if parent is not None:
+        par = parent
+    if base is not None:
+        name_no_suffix = base
+
+    new_path = os.path.join(par, name_no_suffix + suf)
+    if type(suffix) is tuple:
+        assert len(suffix) == 2
+        new_path, nsubs = re.subn(r'{}$'.format(suffix[0]), suffix[1], new_path)
+        assert nsubs == 1, nsubs
+    return new_path
 
 def str_to_mb(s):
     # compute mem in mb
@@ -59,6 +77,30 @@ def submit_slurm_job(spec):
     print("Submitted slurm with job id:", job_id)
 
     return job_id
+
+def parse_parameter_notebook(notebook_json):
+
+    spike_in_cells = list()
+    suffixes = list()
+    for cell in notebook_json['cells']:
+        if cell['cell_type'] == 'code':
+            spike_in_cell = {'cell_type': 'code', 'execution_count': 0, 'metadata': {}, 
+                'outputs': [], 'source': cell['source']}
+            spike_in_cells.append(spike_in_cell)
+        if cell['cell_type'] == 'raw':
+            name = cell['source'].split()
+            assert len(name) == 1
+            suffixes.append(name[0])
+
+    if not suffixes or not len(spike_in_cells) == len(suffixes):
+        suffixes = list(map(str, range(len(spike_in_cells))))
+
+    return spike_in_cells, suffixes
+
+def submit_notebooks(notebook_list):
+    command_list = [nbconvert_cmd.format(notebook=notebook, **spec) for notebook in notebook_list]
+    spec['commands'] = '\n'.join(command_list)
+    submit_slurm_job(spec)
 
 
 # string template for slurm script
@@ -206,6 +248,8 @@ if args.inplace and args.parameters:
     print('Do not use --parameters with --inplace')
     sys.exit()
 
+home = os.path.expanduser("~")
+
 spec = {'environment': args.environment,
         'walltime': args.time,
         'account': args.account,
@@ -216,7 +260,7 @@ spec = {'environment': args.environment,
         'sources_loaded': '',
         'slurm': 'source /com/extra/slurm/14.03.0/load.sh',
         'tmp_name': 'slurm_jupyter_run',
-        'tmp_dir': '.slurm_jupyter_run',
+        'tmp_dir': home+'/.slurm_jupyter_run',
         'tmp_script': 'slurm_jupyter_run_{}.sh'.format(int(time.time())),
         'job_name': args.name,
         'job_id': None,
@@ -224,6 +268,9 @@ spec = {'environment': args.environment,
         'format': args.format,
         'inplace': args.inplace,
         }
+
+if not os.path.exists(spec['tmp_dir']):
+    os.makedirs(spec['tmp_dir'])
 
 tup = spec['walltime'].split('-')
 if len(tup) == 1:
@@ -261,22 +308,41 @@ if args.allow_errors:
 else:
     spec['inplace'] = ''
 
+nbconvert_cmd = "jupyter nbconvert --to {format} {inplace} --ExecutePreprocessor.timeout={timeout} {allow_errors} --execute {notebook}"
 
 notebook_list = args.notebooks
 
 if args.parameters:
-    print('--paramters not implemented yet.')
-    sys.exit()
-    # Read cells in parameter notebook
-    
-    # write copies of the notebook with one cell from parameter notebook added as first cell
 
-    notebook_list = [] # modified notebooks
+    with open(args.parameters) as f:
+        notebook_json = json.loads(f.read())
 
-nbconvert_cmd = "jupyter nbconvert --to {format} {inplace} --ExecutePreprocessor.timeout={timeout} {allow_errors} --execute {notebook}"
+    spike_in_cells, suffixes = parse_parameter_notebook(notebook_json)
 
-command_list = [nbconvert_cmd.format(notebook=notebook, **spec) for notebook in notebook_list]
+    for spike_in_cell, suffix in zip(spike_in_cells, suffixes):
 
-spec['commands'] = '\n'.join(command_list)
-submit_slurm_job(spec)
+        new_notebook_list = list()
+
+        for notebook_path in notebook_list:
+
+            notebook_base_name = modpath(notebook_path, parent='', suffix='')
+            out_dir = modpath(notebook_path, suffix='')
+            os.makedirs(out_dir, exist_ok=True)
+
+            new_json = copy.deepcopy(notebook_json)
+            new_json['cells'].insert(0, spike_in_cell)
+            new_notebook_path = modpath(notebook_path, base=notebook_base_name + '_' + suffix, parent=out_dir)
+            with open(new_notebook_path, 'w') as f:
+                f.write(json.dumps(new_json))
+
+            new_notebook_list.append(new_notebook_path)
+
+        notebook_list = new_notebook_list
+
+        submit_notebooks(notebook_list)
+
+else:
+
+    submit_notebooks(notebook_list)
+
 
