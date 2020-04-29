@@ -1,4 +1,8 @@
-# slurm_jupyter_run
+# Command line execution Jupyter notebooks on a SLURM cluster
+
+You can execute long-running notebooks on the cluster so you do not have to wait for them to complete.
+
+You can also easily run the same notebook with different parameter settings.
 
 ## Executing a notebook
 
