@@ -88,7 +88,7 @@ def parse_parameter_notebook(notebook_json):
                 'outputs': [], 'source': cell['source']}
             spike_in_cells.append(spike_in_cell)
         if cell['cell_type'] == 'raw':
-            name = cell['source'].split()
+            name = cell['source'][0].split()
             assert len(name) == 1
             suffixes.append(name[0])
 
@@ -96,11 +96,6 @@ def parse_parameter_notebook(notebook_json):
         suffixes = list(map(str, range(len(spike_in_cells))))
 
     return spike_in_cells, suffixes
-
-def submit_notebooks(notebook_list, spec):
-    command_list = [nbconvert_cmd.format(notebook=notebook, **spec) for notebook in notebook_list]
-    spec['commands'] = ' && '.join(command_list)
-    submit_slurm_job(spec)
 
 
 # string template for slurm script
@@ -216,17 +211,21 @@ parser.add_argument("--timeout",
                   help="Cell execution timeout in seconds. Default -1. No timeout.")
 parser.add_argument("--allow-errors",
                   dest="allow_errors",
-                  default=False,
+                  action='store_true',
                   help="Allow errors in cell executions.")
 parser.add_argument("--format",
                   dest="format",
                   choices=['notebook', 'html', 'pdf'],
-                  default='html',
+                  default='notebook',
                   help="Output format.") 
 parser.add_argument("--inplace",
                   dest="inplace",
-                  default=True,
-                  help="Output format.")       
+                  action='store_true',
+                  help="Output format.")
+parser.add_argument("--cleanup",
+                  dest="cleanup",
+                  action='store_true',
+                  help="Removes un-executed notebooks generated using --parameters and format other than 'notebook'")                           
 
 parser.add_argument("-p", "--parameters",
                   dest="parameters",
@@ -241,9 +240,13 @@ if args.nodes != 1:
     print("Multiprocessign across multiple nodes not supported yet - sorry")
     sys.exit()
 
-# if args.inplace and args.format != 'notebook':
-#     print('Only use --inplace with --format notebook')
-#     sys.exit()
+if args.inplace and args.format != 'notebook':
+    print('Only not use --inplace with other formats than "notebook" format')
+    sys.exit()
+
+if args.cleanup and not args.parameters:
+    print("Only use --cleanup with --parameters")
+    sys.exit()
 
 home = os.path.expanduser("~")
 
@@ -300,12 +303,19 @@ if args.allow_errors:
 else:
     spec['allow_errors'] = ''
 
-if args.inplace or args.parameters:
+if args.inplace:
     spec['inplace'] = '--inplace'
 else:
     spec['inplace'] = ''
 
-nbconvert_cmd = "jupyter nbconvert --to {format} {inplace} --ExecutePreprocessor.timeout={timeout} {allow_errors} --execute {notebook}"
+if args.parameters and args.format == 'notebook':
+    spec['inplace'] = '--inplace'
+else:
+    spec['inplace'] = ''
+
+
+
+nbconvert_cmd = "jupyter nbconvert --ClearOutputPreprocessor.enabled=True --ExecutePreprocessor.timeout={timeout} {allow_errors} {inplace} --to {format} --execute {notebook}"
 
 notebook_list = args.notebooks
 
@@ -322,11 +332,18 @@ if args.parameters:
 
         for notebook_path in notebook_list:
 
+            with open(notebook_path) as f:
+                notebook_json = json.loads(f.read())
+
             notebook_base_name = modpath(notebook_path, parent='', suffix='')
             out_dir = modpath(notebook_path, suffix='')
             os.makedirs(out_dir, exist_ok=True)
 
             new_json = copy.deepcopy(notebook_json)
+
+            for i in range(len(new_json['cells'])):
+                new_json['cells'][i]['outputs'] = []
+
             new_json['cells'].insert(0, spike_in_cell)
             new_notebook_path = modpath(notebook_path, base=notebook_base_name + '_' + suffix, parent=out_dir)
             with open(new_notebook_path, 'w') as f:
@@ -334,9 +351,19 @@ if args.parameters:
 
             new_notebook_list.append(new_notebook_path)
 
-        submit_notebooks(new_notebook_list, spec)
+        if args.format != 'notebook' and args.cleanup:
+            param_nbconvert_cmd = nbconvert_cmd + ' && rm -f {notebook}'
+        else:
+            param_nbconvert_cmd = nbconvert_cmd
+
+        command_list = [param_nbconvert_cmd.format(notebook=notebook, **spec) for notebook in new_notebook_list]
+        spec['commands'] = ' && '.join(command_list)
+        submit_slurm_job(spec)
 
 else:
-    submit_notebooks(notebook_list, spec)
+    command_list = [nbconvert_cmd.format(notebook=notebook, **spec) for notebook in notebook_list]
+    spec['commands'] = ' && '.join(command_list)
+    submit_slurm_job(spec)
+
 
 
