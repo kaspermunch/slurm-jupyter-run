@@ -1,4 +1,4 @@
-# Command line execution Jupyter notebooks on a SLURM cluster
+# Execution of Jupyter notebooks on a SLURM cluster
 
 You can execute long-running notebooks on the cluster so you do not have to wait for them to complete.
 
