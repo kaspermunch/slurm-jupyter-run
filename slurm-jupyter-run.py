@@ -97,9 +97,9 @@ def parse_parameter_notebook(notebook_json):
 
     return spike_in_cells, suffixes
 
-def submit_notebooks(notebook_list):
+def submit_notebooks(notebook_list, spec):
     command_list = [nbconvert_cmd.format(notebook=notebook, **spec) for notebook in notebook_list]
-    spec['commands'] = '\n'.join(command_list)
+    spec['commands'] = ' && '.join(command_list)
     submit_slurm_job(spec)
 
 
@@ -216,6 +216,7 @@ parser.add_argument("--timeout",
                   help="Cell execution timeout in seconds. Default -1. No timeout.")
 parser.add_argument("--allow-errors",
                   dest="allow_errors",
+                  default=False,
                   help="Allow errors in cell executions.")
 parser.add_argument("--format",
                   dest="format",
@@ -224,7 +225,7 @@ parser.add_argument("--format",
                   help="Output format.") 
 parser.add_argument("--inplace",
                   dest="inplace",
-                  default=False,
+                  default=True,
                   help="Output format.")       
 
 parser.add_argument("-p", "--parameters",
@@ -240,13 +241,9 @@ if args.nodes != 1:
     print("Multiprocessign across multiple nodes not supported yet - sorry")
     sys.exit()
 
-if args.inplace and args.format != 'notebook':
-    print('Only use --inplace with --format notebook')
-    sys.exit()
-
-if args.inplace and args.parameters:
-    print('Do not use --parameters with --inplace')
-    sys.exit()
+# if args.inplace and args.format != 'notebook':
+#     print('Only use --inplace with --format notebook')
+#     sys.exit()
 
 home = os.path.expanduser("~")
 
@@ -303,7 +300,7 @@ if args.allow_errors:
 else:
     spec['allow_errors'] = ''
 
-if args.allow_errors:
+if args.inplace or args.parameters:
     spec['inplace'] = '--inplace'
 else:
     spec['inplace'] = ''
@@ -337,12 +334,9 @@ if args.parameters:
 
             new_notebook_list.append(new_notebook_path)
 
-        notebook_list = new_notebook_list
-
-        submit_notebooks(notebook_list)
+        submit_notebooks(new_notebook_list, spec)
 
 else:
-
-    submit_notebooks(notebook_list)
+    submit_notebooks(notebook_list, spec)
 
 
