@@ -14,7 +14,7 @@ Execute a notebook `notebook1.ipynb` crating a new file called `notebook1.nbconv
 
 Execute a notebook `notebook1.ipynb` inplace:
 
-    python slurm-jupyter-run.py --inline notebook1.ipynb
+    python slurm-jupyter-run.py --inplace notebook1.ipynb
 
 Execute a notebook `notebook1.ipynb` crating a html file called `notebook1.html`:
 
