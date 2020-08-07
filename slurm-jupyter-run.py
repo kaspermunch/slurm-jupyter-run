@@ -303,12 +303,7 @@ if args.allow_errors:
 else:
     spec['allow_errors'] = ''
 
-if args.inplace:
-    spec['inplace'] = '--inplace'
-else:
-    spec['inplace'] = ''
-
-if args.parameters and args.format == 'notebook':
+if args.inplace or args.parameters and args.format == 'notebook':
     spec['inplace'] = '--inplace'
 else:
     spec['inplace'] = ''
