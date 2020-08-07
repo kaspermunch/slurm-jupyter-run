@@ -1,7 +1,7 @@
 import setuptools
 
 setuptools.setup(name='slurm-jupyter-run',
-      version='1.0.4',
+      version='1.0.5',
       author='Kasper Munch',
       description='Utility for notebooks on a slurm cluster.',
       # long_description=long_description,
