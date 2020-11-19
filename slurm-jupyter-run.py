@@ -354,8 +354,8 @@ if args.parameters:
 
             new_json = copy.deepcopy(notebook_json)
 
-            for i in range(len(new_json['cells'])):
-                new_json['cells'][i]['outputs'] = []
+            # for i in range(len(new_json['cells'])):
+            #     new_json['cells'][i]['outputs'] = []
 
             new_json['cells'].insert(0, spike_in_cell)
             new_notebook_path = modpath(notebook_path, base=notebook_base_name + '_' + suffix, parent=out_dir)
