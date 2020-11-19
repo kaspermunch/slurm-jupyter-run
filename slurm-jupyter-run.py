@@ -13,6 +13,8 @@ from subprocess import PIPE, Popen
 
 import json, copy
 
+# TODO: Turn into a libarary with an entry point for the script. That way the library can also provide support for importing the parameters if the notebook is not run with slurm-jupyter-run.
+
 def modpath(p, parent=None, base=None, suffix=None):
     par, name = os.path.split(p)
     name_no_suffix, suf = os.path.splitext(name)
